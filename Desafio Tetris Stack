@@ -1,0 +1,147 @@
+import pygame
+import random
+
+# Configurações principais
+LARGURA_TELA = 300
+ALTURA_TELA = 600
+TAMANHO_BLOCO = 30
+COLUNAS = LARGURA_TELA // TAMANHO_BLOCO
+LINHAS = ALTURA_TELA // TAMANHO_BLOCO
+FPS = 60
+
+# Cores
+PRETO = (0, 0, 0)
+BRANCO = (255, 255, 255)
+CINZA = (128, 128, 128)
+CORES_PECA = [(0, 255, 255), (0, 0, 255), (255, 127, 0), (255, 255, 0), (0, 255, 0), (128, 0, 128), (255, 0, 0)]
+
+# Definições das peças (matriz 4x4)
+Pecas = [
+    [[1, 1, 1, 1]],  # I
+    [[1, 1, 1], [0, 1, 0]],  # T
+    [[1, 1, 0], [0, 1, 1]],  # S
+    [[0, 1, 1], [1, 1, 0]],  # Z
+    [[1, 1], [1, 1]],  # O
+    [[1, 0, 0], [1, 1, 1]],  # L
+    [[0, 0, 1], [1, 1, 1]],  # J
+]
+
+class Peca:
+    def __init__(self):
+        self.tipo = random.randint(0, len(Pecas) - 1)
+        self.matriz = Pecas[self.tipo]
+        self.cor = CORES_PECA[self.tipo]
+        self.x = COLUNAS // 2 - len(self.matriz[0]) // 2
+        self.y = 0
+
+    def rotacionar(self):
+        self.matriz = [list(row) for row in zip(*self.matriz[::-1])]
+
+def criar_tabuleiro():
+    return [[0 for _ in range(COLUNAS)] for _ in range(LINHAS)]
+
+def colisao(peca, tabuleiro, dx=0, dy=0, matriz=None):
+    matriz = matriz if matriz else peca.matriz
+    for y in range(len(matriz)):
+        for x in range(len(matriz[y])):
+            if matriz[y][x]:
+                nx, ny = peca.x + x + dx, peca.y + y + dy
+                if nx < 0 or nx >= COLUNAS or ny >= LINHAS or (ny >= 0 and tabuleiro[ny][nx]):
+                    return True
+    return False
+
+def fixar_peca(peca, tabuleiro):
+    for y in range(len(peca.matriz)):
+        for x in range(len(peca.matriz[y])):
+            if peca.matriz[y][x]:
+                tabuleiro[peca.y + y][peca.x + x] = peca.tipo + 1
+
+def limpar_linhas(tabuleiro):
+    nova = [linha for linha in tabuleiro if any(v == 0 for v in linha)]
+    linhas_removidas = LINHAS - len(nova)
+    while len(nova) < LINHAS:
+        nova.insert(0, [0 for _ in range(COLUNAS)])
+    return nova, linhas_removidas
+
+def desenhar_tabuleiro(tela, tabuleiro, peca, proxima_peca, score):
+    tela.fill(PRETO)
+    # Desenhar peças fixas
+    for y in range(LINHAS):
+        for x in range(COLUNAS):
+            cor = CORES_PECA[tabuleiro[y][x] - 1] if tabuleiro[y][x] else CINZA
+            if tabuleiro[y][x]:
+                pygame.draw.rect(tela, cor, (x * TAMANHO_BLOCO, y * TAMANHO_BLOCO, TAMANHO_BLOCO, TAMANHO_BLOCO))
+                pygame.draw.rect(tela, CINZA, (x * TAMANHO_BLOCO, y * TAMANHO_BLOCO, TAMANHO_BLOCO, TAMANHO_BLOCO), 1)
+
+    # Desenhar peça ativa
+    for y in range(len(peca.matriz)):
+        for x in range(len(peca.matriz[y])):
+            if peca.matriz[y][x]:
+                pygame.draw.rect(tela, peca.cor, ((peca.x + x) * TAMANHO_BLOCO, (peca.y + y) * TAMANHO_BLOCO, TAMANHO_BLOCO, TAMANHO_BLOCO))
+
+    # Desenhar próxima peça
+    for y in range(len(proxima_peca.matriz)):
+        for x in range(len(proxima_peca.matriz[y])):
+            if proxima_peca.matriz[y][x]:
+                pygame.draw.rect(tela, proxima_peca.cor, (LARGURA_TELA + 50 + x * TAMANHO_BLOCO, 50 + y * TAMANHO_BLOCO, TAMANHO_BLOCO, TAMANHO_BLOCO))
+
+    # Placar
+    font = pygame.font.SysFont("Arial", 24, bold=True)
+    score_text = font.render(f"Score: {score}", True, BRANCO)
+    tela.blit(score_text, (LARGURA_TELA + 50, 10))
+
+def main():
+    pygame.init()
+    tela = pygame.display.set_mode((LARGURA_TELA + 200, ALTURA_TELA))
+    pygame.display.set_caption("Desafio Tetris Stack")
+    clock = pygame.time.Clock()
+    tabuleiro = criar_tabuleiro()
+    peca = Peca()
+    proxima_peca = Peca()
+    queda = pygame.USEREVENT + 1
+    pygame.time.set_timer(queda, 400)
+    score = 0
+    rodando = True
+
+    while rodando:
+        clock.tick(FPS)
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                rodando = False
+            elif evento.type == queda:
+                if not colisao(peca, tabuleiro, dy=1):
+                    peca.y += 1
+                else:
+                    fixar_peca(peca, tabuleiro)
+                    tabuleiro, linhas = limpar_linhas(tabuleiro)
+                    score += linhas * 100
+                    peca = proxima_peca
+                    proxima_peca = Peca()
+                    if colisao(peca, tabuleiro):
+                        rodando = False  # Fim de jogo
+            elif evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_LEFT and not colisao(peca, tabuleiro, dx=-1):
+                    peca.x -= 1
+                elif evento.key == pygame.K_RIGHT and not colisao(peca, tabuleiro, dx=1):
+                    peca.x += 1
+                elif evento.key == pygame.K_DOWN and not colisao(peca, tabuleiro, dy=1):
+                    peca.y += 1
+                elif evento.key == pygame.K_UP:
+                    matriz_rot = [list(row) for row in zip(*peca.matriz[::-1])]
+                    if not colisao(peca, tabuleiro, matriz=matriz_rot):
+                        peca.rotacionar()
+
+        desenhar_tabuleiro(tela, tabuleiro, peca, proxima_peca, score)
+        pygame.display.flip()
+
+    # Fim de jogo
+    tela.fill(PRETO)
+    font = pygame.font.SysFont("Arial", 36, bold=True)
+    msg = font.render("GAME OVER!", True, (255, 0, 0))
+    tela.blit(msg, (LARGURA_TELA // 2 - 100, ALTURA_TELA // 2 - 30))
+    pygame.display.flip()
+    pygame.time.wait(3000)
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
